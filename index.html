@@ -3,15 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>位置情報ゲーム (アイテム)</title>
+    <title>位置情報ゲーム</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <style>
-        html{
-            height: 100%;
-        }
         body {
             display: flex;
             flex-direction: column;
@@ -22,9 +19,9 @@
             background-color: #f8f8f8;
         }
         #map {
-            height: auto;
+            height: calc(100vh - 80px);
             width: 100vw;
-            border-radius: 0; 
+            border-radius: 0; /* マップは画面いっぱいに */
             box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1),
                         0 4px 6px -2px rgba(0,0,0,0.05);
             overflow: hidden;
@@ -71,7 +68,7 @@
         }
         @keyframes fadeInScale {
             from { opacity: 0; transform: scale(0.9);}
-            to  { opacity: 1; transform: scale(1);}
+            to  { opacity: 1; transform: scale(1);}
         }
         .message-content h2 {
             font-size: 1.5rem;
@@ -105,12 +102,12 @@
 
         .control-bar {
             display:flex;
-            justify-content:space-between; 
+            justify-content:space-between; /* 要素を両端に配置 */
             align-items:center;
-            padding:8px 16px; 
+            padding:8px 16px; /* パディングを調整 */
             background-color:#f0f0f0;
             box-shadow:0 -4px 8px rgba(0,0,0,0.1);
-            height:96px; /* 高さ調整 */
+            height:80px;
             gap: 1rem;
         }
         .status-panel {
@@ -121,34 +118,17 @@
         .event-button {
             background-color:#3B82F6; color:white;
             padding:15px 20px; border-radius:10px;
-            font-size:1.0rem; font-weight:bold; 
+            font-size:1.0rem; font-weight:bold; /* 文字サイズを調整 */
             border:none; cursor:pointer;
             white-space: nowrap;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: all 0.2s ease;
         }
-        .event-button:hover {
-            background-color: #2563EB;
-            transform: translateY(-1px);
-        }
-        .event-button.use-item {
-            background-color: #EF4444; /* アイテム使用時は赤色に */
-        }
-        .event-button.use-item:hover {
-            background-color: #DC2626;
-        }
-        
         .diary-button {
             background-color:#4f46e5; color:white;
             padding:10px 15px; border-radius:10px;
             font-size:1rem; font-weight:bold;
             border:none; cursor:pointer;
             white-space: nowrap;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            transition: background-color 0.2s ease;
-        }
-        .diary-button:hover {
-            background-color: #6366F1;
         }
         
         /* タイトル画面のスタイル */
@@ -286,6 +266,7 @@
     <!-- ロード中のオーバーレイ -->
     <div id="loadingOverlay" class="loading-overlay hidden">
         <div class="loading-spinner"></div>
+        <!-- ロードメッセージをより詳細に -->
         <span id="loadingMessage">初期設定中...</span>
     </div>
 
@@ -309,10 +290,9 @@
     <div id="gameScreen" class="hidden flex-1 flex flex-col">
         <div id="map" class="flex-1"></div>
         <div id="controlBar" class="control-bar">
-            <!-- ステータス表示パネル -->
+            <!-- 追加したステータス表示パネル -->
             <div id="statusPanel" class="status-panel text-gray-700">
                 <div id="visitedCountDisplay" class="font-bold text-lg text-indigo-700">実績: 0 / 5 箇所</div>
-                <div id="itemStatusDisplay" class="text-sm font-medium text-purple-600">アイテム: なし</div>
                 <div id="nearestTargetDisplay" class="text-sm font-medium text-gray-600">現在地を測定中...</div>
             </div>
             
@@ -338,34 +318,29 @@
         // デフォルトの座標（東京駅） - 位置情報エラー時のフォールバック
         const DEFAULT_LAT = 35.681236, DEFAULT_LNG = 139.767125;
 
+        // --- 修正箇所 1: 認証状態フラグの追加 ---
+        let isAuthReady = false; 
+
         // Firebase Initialization
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             // Local testing config (dummy values)
             apiKey: "AIzaSyCDSiW9H_zD0yMUda9QI0PHViKDPUJ7aak",
-            authDomain: "mapaplication-131cd.firebaseapp.com",
-            projectId: "mapaplication-131cd",
-            storageBucket: "mapaplication-131cd.firebasestorage.app",
-            messagingSenderId: "705232824885",
-            appId: "1:705232824885:web:206e16a332b1b987929f7c",
-            measurementId: "G-39Q9ZDTB0V"
+  authDomain: "mapaplication-131cd.firebaseapp.com",
+  projectId: "mapaplication-131cd",
+  storageBucket: "mapaplication-131cd.firebasestorage.app",
+  messagingSenderId: "705232824885",
+  appId: "1:705232824885:web:206e16a332b1b987929f7c",
+  measurementId: "G-39Q9ZDTB0V"
         };
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-        let isAuthReady = false; 
         let userId = null;
         let visitedLocations = {}; // { locationId: { id, name, firstVisit, lastVisit } }
         let currentMapPosition = { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
-        
-        // --- アイテムシステム用グローバルステート ---
-        let heldItem = null; // プレイヤーが現在持っているアイテムID (e.g., 'rusty_key' or null)
 
-        // アイテムデータ
-        const itemData = {
-            rusty_key: { name: '錆びた鍵' }
-        };
 
         // Auth State Listener
         onAuthStateChanged(auth, async (user) => {
@@ -373,14 +348,16 @@
                 userId = user.uid;
                 console.log("Firebase Auth State Changed. User ID:", userId);
                 
-                // 1. 訪問履歴をリアルタイムで同期
+                // 訪問履歴をリアルタイムで同期
                 const visitedRef = collection(db, `artifacts/${appId}/users/${userId}/visited_locations`);
                 onSnapshot(visitedRef, (snapshot) => {
                     snapshot.docChanges().forEach((change) => {
                         const data = change.doc.data();
+                        // Firestoreから取得したTimestampをDateオブジェクトに変換
                         visitedLocations[change.doc.id] = {
                             id: change.doc.id,
                             name: data.name,
+                            // Timestampは.toDate()で変換できる
                             firstVisit: data.firstVisit ? data.firstVisit.toDate() : null,
                             lastVisit: data.lastVisit ? data.lastVisit.toDate() : null
                         };
@@ -388,33 +365,17 @@
                     console.log("Visited locations updated:", visitedLocations);
                     // 訪問履歴が更新されたらUIも更新
                     updateGameStatusUI(currentMapPosition.lat, currentMapPosition.lng);
+
                 }, (error) => {
                     console.error("Error listening to visited locations:", error);
                 });
-
-                // 2. プレイヤーの状態（アイテム）をリアルタイムで同期
-                const playerStateRef = doc(db, `artifacts/${appId}/users/${userId}/player_state`, 'current');
-                onSnapshot(playerStateRef, (docSnap) => {
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        heldItem = data.heldItem || null; // heldItem: 'rusty_key' or null
-                        console.log("Player state updated. Held Item:", heldItem);
-                    } else {
-                        // 初回起動時またはデータがない場合は初期化
-                        heldItem = null;
-                        setDoc(playerStateRef, { heldItem: null, lastUpdate: serverTimestamp() }, { merge: true });
-                    }
-                    updateGameStatusUI(currentMapPosition.lat, currentMapPosition.lng);
-                }, (error) => {
-                    console.error("Error listening to player state:", error);
-                });
-
 
                 // 認証が完了し、データリスナーも設定されたことを示す
                 isAuthReady = true; 
 
             } else {
                 console.log("No user signed in. Signing in anonymously.");
+                // 初回認証処理 (匿名認証またはカスタム認証)
                 try {
                     if (typeof __initial_auth_token !== 'undefined') {
                         await signInWithCustomToken(auth, __initial_auth_token);
@@ -427,43 +388,58 @@
             }
         });
 
-        // Game messages data (アイテム関連のメッセージを追加)
+        // Game messages data
         const gameMessages = {
-            tokyo_station: { title: '東京駅の秘密', text: '東京駅を発見しました！不思議なメモが落ちています…。「東の森の奥深くに、失われた宝が眠る。」と書かれている。' },
-            asakusa_sensoji: { title: '浅草寺の静寂', text: '浅草寺に到着しました。荘厳な雰囲気の中で、この世界の真実が映し出されているように見えます。' },
-            shinjuku_gyoen: { title: '新宿御苑の手帳', text: '新宿御苑のベンチの下に、古びた手帳を見つけました。次の目的地へのヒントが隠されているようです。' },
-            ryuiti: { title:'竜一の隠れ家', text: '高台の上にあるため見晴らしがいい' },
-            ryugasaki_syotengai: { title:'龍ヶ崎商店街', text: 'ここではいろいろなアイテムが売っている。' },
-            
-            // --- アイテム関連メッセージ ---
-            item_acquired: { title: 'アイテム入手！', text: '竜一の隠れ家で、不思議な力で「錆びた鍵」を手に入れました。何かに使えるかもしれません。' },
-            old_shrine_default: { title: '古びた祠', text: '鍵がかかった祠があります。何か古い鍵があれば開けられそうです。' },
-            shrine_unlocked: { title: '祠が開いた！', text: '錆びた鍵を使って祠の扉を開けると、中から「伝説の剣の設計図」が見つかりました！大冒険の始まりです！' },
-            item_not_needed: { title: 'イベント発生', text: '何もアイテムを使わずにイベントが起こりました。' },
-            item_wrong_item: { title: 'アイテムが合わない', text: '持っているアイテムは「古びた祠」には合わないようです。' },
-
-            // --- システムメッセージ ---
-            geolocation_error: { title: '位置情報エラー', text: '位置情報を取得できません。お使いのブラウザやデバイスの設定（GPSアクセス許可）を確認してください。' },
-            browser_unsupported: { title: '非対応ブラウザ', text: 'お使いのブラウザはGeolocationをサポートしていません。' },
-            firestore_error: { title: 'データ保存エラー', text: 'ユーザーデータの保存中に問題が発生しました。インターネット接続を確認し、ブラウザを再読み込みしてもう一度お試しください。' },
-            auth_error: { title: '認証処理中', text: 'ゲームの初期設定（ユーザー認証）がまだ完了していません。しばらくお待ちいただくか、ブラウザを再読み込みしてください。' },
-            game_intro: { title: '冒険の始まり', text: 'このゲームは、現実世界を舞台にした冒険ゲームです。\n\n地図上にある青いサークルは目的地です。サークルの中に入ると、画面の下にボタンが現れます。ボタンを押して、メッセージを読みましょう！\n\nさあ、冒険に出発です！' }
+            tokyo_station: {
+                title: '東京駅の秘密',
+                text: '東京駅を発見しました！不思議なメモが落ちています…。「東の森の奥深くに、失われた宝が眠る。」と書かれている。'
+            },
+            asakusa_sensoji: {
+                title: '浅草寺の静寂',
+                text: '浅草寺に到着しました。荘厳な雰囲気の中で、この世界の真実が映し出されているように見えます。'
+            },
+            shinjuku_gyoen: {
+                title: '新宿御苑の手帳',
+                text: '新宿御苑のベンチの下に、古びた手帳を見つけました。次の目的地へのヒントが隠されているようです。'
+            },
+            geolocation_error: {
+                title: '位置情報エラー',
+                text: '位置情報を取得できません。お使いのブラウザやデバイスの設定（GPSアクセス許可）を確認してください。'
+            },
+            browser_unsupported: {
+                title: '非対応ブラウザ',
+                text: 'お使いのブラウザはGeolocationをサポートしていません。'
+            },
+            ryuiti: {
+                title:'竜一の隠れ家',
+                text: '高台の上にあるため見晴らしがいい'
+            },
+            ryugasaki_syotengai: {
+                title:'龍ヶ崎商店街',
+                text: 'ここではいろいろなアイテムが売っている。'
+            },
+            game_intro: {
+                title: '冒険の始まり',
+                text: 'このゲームは、現実世界を舞台にした冒険ゲームです。\n\n地図上にある青いサークルは目的地です。サークルの中に入ると、画面の下にボタンが現れます。ボタンを押して、メッセージを読みましょう！\n\nさあ、冒険に出発です！'
+            },
+            firestore_error: {
+                title: 'データ保存エラー',
+                text: 'ユーザーデータの保存中に問題が発生しました。インターネット接続を確認し、ブラウザを再読み込みしてもう一度お試しください。'
+            },
+            auth_error: {
+                title: '認証処理中',
+                text: 'ゲームの初期設定（ユーザー認証）がまだ完了していません。しばらくお待ちいただくか、ブラウザを再読み込みしてください。'
+            }
         };
 
-        let map, marker, watchId=null, activeEventLocation=null;
+        let map, marker, watchId=null, lastPosition=null, activeEventLocation=null;
 
         const eventLocations = [
             { id:'tokyo_station', name:'東京駅', lat:35.681236, lng:139.767125, radius:150, messageId: 'tokyo_station' },
             { id:'asakusa_sensoji', name:'浅草寺', lat:35.714774, lng:139.796637, radius:80, messageId: 'asakusa_sensoji' },
             { id:'shinjuku_gyoen', name:'新宿御苑', lat:35.685175, lng:139.710776, radius:100, messageId: 'shinjuku_gyoen' },
-            
-            // アイテム入手スポット (錆びた鍵を入手)
-            // プレイヤーが現在地にいない可能性があるため、radiusを大きめに設定
-            { id:'ryuiti', name:'竜一', lat:35.9150826, lng:140.1875742, radius:150, messageId: 'ryuiti', acquireItem: 'rusty_key' },
-            { id:'syotengai', name:'龍ヶ崎商店街', lat:35.90764205837861, lng:140.18062645636314, radius:150, messageId: 'ryugasaki_syotengai'},
-
-            // アイテム使用スポット (錆びた鍵を要求)
-            { id:'old_shrine', name:'古びた祠', lat:35.9080, lng:140.1850, radius:1000000, messageId: 'old_shrine_default', requiredItem: 'rusty_key', useMessageId: 'shrine_unlocked' }
+            { id:'ryuiti', name:'竜一の隠れ家', lat:35.9150826, lng:140.1875742, radius:15000, messageId: 'ryuiti' },
+            { id:'syotengai', name:'龍ヶ崎商店街', lat:35.90764205837861, lng:140.18062645636314, radius:150, messageId: 'ryugasaki_syotengai'}
         ];
 
         // DOM elements
@@ -471,7 +447,7 @@
         const introMessageBox = document.getElementById('introMessageBox');
         const gameScreen = document.getElementById('gameScreen');
         const loadingOverlay = document.getElementById('loadingOverlay');
-        const loadingMessage = document.getElementById('loadingMessage'); 
+        const loadingMessage = document.getElementById('loadingMessage'); // 修正: メッセージエレメントを取得
         const messageBox = document.getElementById('messageBox');
         const messageTitle = document.getElementById('messageTitle');
         const messageText = document.getElementById('messageText');
@@ -479,18 +455,13 @@
         const eventButtonText = document.getElementById('eventButtonText');
         const diaryScreen = document.getElementById('diaryScreen');
         const diaryList = document.getElementById('diaryList');
+        const startButton = document.getElementById('startButton');
+        const continueButton = document.getElementById('continueButton');
+        const closeMessageButton = document.getElementById('closeMessageButton');
+        const closeDiaryScreenButton = document.getElementById('closeDiaryScreenButton');
+        const diaryButton = document.getElementById('diaryButton');
         const visitedCountDisplay = document.getElementById('visitedCountDisplay');
-        const itemStatusDisplay = document.getElementById('itemStatusDisplay'); // アイテム表示
         const nearestTargetDisplay = document.getElementById('nearestTargetDisplay');
-
-        // イベントリスナーのセットアップ（DOM取得の下に移動）
-        document.getElementById('startButton').addEventListener('click', startGame);
-        document.getElementById('continueButton').addEventListener('click', continueToGame);
-        document.getElementById('closeMessageButton').addEventListener('click', hideMessageBox);
-        document.getElementById('closeDiaryScreenButton').addEventListener('click', hideDiaryScreen);
-        document.getElementById('eventActionButton').addEventListener('click', handleEventButtonClick);
-        document.getElementById('diaryButton').addEventListener('click', showDiaryScreen);
-
 
         function showMessageBox(messageId) {
             const messageData = gameMessages[messageId];
@@ -517,6 +488,7 @@
                 // 日付の新しい順にソート
                 visitedArray.sort((a, b) => b.lastVisit.getTime() - a.lastVisit.getTime());
                 visitedArray.forEach(loc => {
+                    // 日付のフォーマット関数
                     const formatDate = (date) => date ? date.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'N/A';
                     
                     const firstVisitDate = formatDate(loc.firstVisit);
@@ -541,70 +513,13 @@
         }
 
         /**
-         * 訪問履歴とアイテムの処理をFirestoreに保存・更新する
+         * 訪問履歴をFirestoreに保存・更新する
          */
-        async function updatePlayerState(locationId, locationName, acquireItem, consumeItem = false) {
-            const now = serverTimestamp();
-            
-            // 1. 訪問履歴の更新
-            const locationDocRef = doc(db, `artifacts/${appId}/users/${userId}/visited_locations`, locationId);
-            try {
-                const docSnap = await getDoc(locationDocRef);
-                if (docSnap.exists()) {
-                    await setDoc(locationDocRef, { lastVisit: now }, { merge: true });
-                } else {
-                    await setDoc(locationDocRef, { id: locationId, name: locationName, firstVisit: now, lastVisit: now });
-                }
-            } catch (error) {
-                console.error("Error updating Firestore visit record:", error);
-                showMessageBox('firestore_error');
-                return;
-            }
-
-            // 2. アイテムの更新 (プレイヤーの状態ドキュメントを更新)
-            const playerStateRef = doc(db, `artifacts/${appId}/users/${userId}/player_state`, 'current');
-            let newHeldItem = heldItem;
-
-            if (acquireItem && !heldItem) {
-                // アイテムを入手する場合
-                newHeldItem = acquireItem;
-                console.log(`Item acquired: ${acquireItem}`);
-            } else if (consumeItem) {
-                // アイテムを消費する場合
-                newHeldItem = null;
-                console.log(`Item consumed.`);
-            }
-
-            if (newHeldItem !== heldItem) {
-                 try {
-                    await setDoc(playerStateRef, { heldItem: newHeldItem, lastUpdate: now }, { merge: true });
-                    // heldItemの更新はonSnapshotで自動的に行われる
-                } catch (error) {
-                    console.error("Error updating Firestore held item:", error);
-                    showMessageBox('firestore_error');
-                }
-            }
-            
-            // メッセージを表示
-            if (acquireItem && !heldItem) {
-                showMessageBox('item_acquired');
-            } else if (consumeItem) {
-                showMessageBox(activeEventLocation.useMessageId);
-            } else if (activeEventLocation.requiredItem && heldItem) {
-                showMessageBox('item_not_needed'); // requiredItemがあるが、特別なメッセージがなかった場合
-            } else {
-                showMessageBox(activeEventLocation.messageId);
-            }
-
-            // ボタンを非表示にする（メッセージボックスを閉じたら再評価される）
-            eventActionButton.classList.add('hidden');
-            activeEventLocation = null;
-        }
-
         async function handleEventButtonClick() {
+            // --- 修正箇所 1: 認証完了を待つ ---
             if (!isAuthReady || !userId) {
                 console.error("Authentication not ready or user ID missing. Blocking Firestore write.");
-                showMessageBox('auth_error'); 
+                showMessageBox('auth_error'); // 認証未完了メッセージ
                 return;
             }
 
@@ -613,49 +528,36 @@
                 return;
             }
             
-            const location = activeEventLocation;
-
-            // 1. アイテム使用ロジックのチェック
-            if (location.requiredItem) {
-                const requiredItemName = itemData[location.requiredItem]?.name || '必要なアイテム';
-                
-                if (heldItem === location.requiredItem) {
-                    // 必要なアイテムを持っている -> アイテムを使用して特別なイベントを発生させる
-                    if (location.useMessageId) {
-                        // 訪問記録を更新し、アイテムを消費する
-                        await updatePlayerState(location.id, location.name, null, true); // true = consume item
-                    } else {
-                        // requiredItemはあるが、useMessageIdがない場合
-                        showMessageBox('item_not_needed'); 
-                    }
-                    return;
-
-                } else if (heldItem) {
-                    // 別のアイテムを持っている
-                    const heldItemName = itemData[heldItem]?.name || '未知のアイテム';
-                    gameMessages.item_wrong_item.text = `${location.name}を開けるには${requiredItemName}が必要です。今持っている${heldItemName}はここでは使えません。`;
-                    showMessageBox('item_wrong_item');
-                    return;
-
-                } else {
-                    // アイテムを何も持っていない
-                    showMessageBox(location.messageId); // 通常のメッセージ (例: 「鍵が必要です」)
-                    // 訪問記録のみ更新 (この場合は訪問とは見なさないが、メッセージ表示のために利用)
-                    const locationDocRef = doc(db, `artifacts/${appId}/users/${userId}/visited_locations`, location.id);
-                    await setDoc(locationDocRef, { lastVisit: serverTimestamp(), name: location.name }, { merge: true });
-                    return;
-                }
-            } 
+            const locationDocRef = doc(db, `artifacts/${appId}/users/${userId}/visited_locations`, activeEventLocation.id);
             
-            // 2. アイテム入手ロジックのチェック
-            if (location.acquireItem && !heldItem) {
-                 // アイテムを入手する場合
-                await updatePlayerState(location.id, location.name, location.acquireItem, false);
-                return;
-            }
+            try {
+                const docSnap = await getDoc(locationDocRef);
+                const now = serverTimestamp();
 
-            // 3. 通常のイベント処理（アイテムが不要な場所、または既にアイテムを入手済みの場所）
-            await updatePlayerState(location.id, location.name, null, false);
+                if (docSnap.exists()) {
+                    // 既に訪問済みの場合、最終訪問日時のみを更新
+                    await setDoc(locationDocRef, {
+                        lastVisit: now
+                    }, { merge: true });
+                    console.log("Updated last visit for", activeEventLocation.name);
+                } else {
+                    // 初回訪問の場合、初回訪問日時と最終訪問日時を記録
+                    await setDoc(locationDocRef, {
+                        id: activeEventLocation.id,
+                        name: activeEventLocation.name,
+                        firstVisit: now,
+                        lastVisit: now
+                    });
+                    console.log("Recorded first visit for", activeEventLocation.name);
+                }
+                
+                // イベントメッセージを表示
+                showMessageBox(activeEventLocation.messageId);
+
+            } catch (error) {
+                console.error("Error updating Firestore visit record:", error);
+                showMessageBox('firestore_error'); 
+            }
         }
 
         // Haversine formula for distance calculation (meters)
@@ -675,10 +577,13 @@
         function initMap(latitude, longitude) {
             const currentLocation = [latitude, longitude];
             if (map) {
+                // マップが既に存在する場合は、視点とマーカーのみを更新
                 map.setView(currentLocation, 18);
                 marker.setLatLng(currentLocation);
             } else {
+                // 初回マップ初期化
                 map = L.map('map').setView(currentLocation, 18);
+                // 日本のタイルも利用可能なOSMを使用
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                     maxZoom: 19
@@ -687,16 +592,17 @@
                 marker = L.marker(currentLocation, {
                     icon: L.divIcon({
                         className: 'custom-marker',
-                        html: `<div class="player-marker"></div>`, 
+                        html: `<div class="player-marker"></div>`, // プレイヤーマーカーのスタイルを適用
                         iconSize: [18, 18]
                     })
                 }).addTo(map);
 
+                // イベント地点のマーカーとサークルを追加
                 eventLocations.forEach(loc => {
                     L.circle([loc.lat, loc.lng], {
                         color: '#0000FF', fillColor: '#0000FF', fillOpacity: 0.15, radius: loc.radius
                     }).addTo(map);
-                    
+                    // 中心点マーカー (視覚的な目印として)
                     L.circleMarker([loc.lat, loc.lng], {
                         color: '#0000FF', fillColor: '#0000FF', fillOpacity: 0.8, radius: 5, stroke: false
                     }).addTo(map)
@@ -707,119 +613,88 @@
         }
 
         /**
-         * 現在の訪問実績、アイテムステータス、最寄り地点を更新する
+         * 現在の訪問実績と最寄りの未訪問地点までの距離を更新する
+         * @param {number} currentLat - 現在の緯度
+         * @param {number} currentLng - 現在の経度
          */
         function updateGameStatusUI(currentLat, currentLng) {
             const visitedCount = Object.keys(visitedLocations).length;
-            const totalLocations = eventLocations.length;
-            visitedCountDisplay.innerText = `実績: ${visitedCount} / ${totalLocations} 箇所`;
-
-            // アイテム表示の更新
-            if (heldItem && itemData[heldItem]) {
-                itemStatusDisplay.innerHTML = `<strong>アイテム: ${itemData[heldItem].name}</strong>`;
-            } else {
-                itemStatusDisplay.innerText = `アイテム: なし`;
-            }
+            visitedCountDisplay.innerText = `実績: ${visitedCount} / ${eventLocations.length} 箇所`;
 
             let nearestUnvisited = null;
             let minDistance = Infinity;
 
-            // ... (最寄り地点計算ロジックは省略せずに残す)
-            if (visitedCount === totalLocations) {
-                 nearestTargetDisplay.innerHTML = '<strong>全ての場所を訪問しました！おめでとう！</strong>';
-            } else {
-                eventLocations.forEach(loc => {
-                    // 訪問済みリストに存在しない場所をチェック (アイテムで消費された地点も含む)
-                    // ただし、全ての地点を追跡目標とするため、アイテム使用はここでは無視
-                    if (loc.id !== 'old_shrine') { // 祠はアイテムを使わないと完了とみなさない
-                        if (!visitedLocations[loc.id]) {
-                            const distance = getDistance(currentLat, currentLng, loc.lat, loc.lng);
-                            if (distance < minDistance) {
-                                minDistance = distance;
-                                nearestUnvisited = loc;
-                            }
-                        }
-                    } else if (loc.id === 'old_shrine' && !visitedLocations[loc.id]) {
-                         const distance = getDistance(currentLat, currentLng, loc.lat, loc.lng);
-                         if (distance < minDistance) {
-                            minDistance = distance;
-                            nearestUnvisited = loc;
-                         }
-                    }
-                });
-
-                if (nearestUnvisited) {
-                    let distanceText;
-                    if (minDistance < 1000) {
-                        distanceText = `${Math.round(minDistance)}m`;
-                    } else {
-                        distanceText = `${(minDistance / 1000).toFixed(1)}km`;
-                    }
-                    nearestTargetDisplay.innerHTML = `<strong>次の目標: ${nearestUnvisited.name}</strong> (約 ${distanceText}先)`;
-                } else if (visitedCount < totalLocations) {
-                    nearestTargetDisplay.innerHTML = '目標地点を探索中...';
-                } else {
-                    nearestTargetDisplay.innerHTML = '現在地を測定中...';
-                }
+            if (visitedCount === eventLocations.length) {
+                nearestTargetDisplay.innerHTML = '<strong>全ての場所を訪問しました！おめでとう！</strong>';
+                return;
             }
 
-
-            // 接近イベント判定とボタン表示の更新
-            let found = false;
-            const GPS_JITTER_BUFFER = 5; 
-            
+            // 1. 最も近い未訪問の地点を見つける
             eventLocations.forEach(loc => {
-                const distance = getDistance(currentLat, currentLng, loc.lat, loc.lng);
-
-                if (distance <= loc.radius + GPS_JITTER_BUFFER) {
-                    activeEventLocation = loc;
-                    eventActionButton.classList.remove('hidden');
-                    eventActionButton.classList.remove('acquire-item', 'use-item'); // クラスをリセット
-                    
-                    let buttonText = `${loc.name}のメッセージを見る`;
-
-                    if (loc.requiredItem && heldItem === loc.requiredItem) {
-                        // アイテム使用可能
-                        buttonText = `${itemData[heldItem].name}を使う (実行)`;
-                        eventActionButton.classList.add('use-item');
-                    } else if (loc.requiredItem) {
-                        // アイテムが必要だが持っていない
-                        buttonText = `${loc.name}を調べる (鍵が必要)`;
-                        eventActionButton.classList.remove('use-item');
-                    } else if (loc.acquireItem && !heldItem) {
-                        // アイテム入手可能
-                        buttonText = `${itemData[loc.acquireItem].name}を入手 (獲得)`;
-                        eventActionButton.classList.add('acquire-item');
+                // 訪問済みリストに存在しない場所をチェック
+                if (!visitedLocations[loc.id]) {
+                    const distance = getDistance(currentLat, currentLng, loc.lat, loc.lng);
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestUnvisited = loc;
                     }
-                    
-                    eventButtonText.innerText = buttonText;
-                    found = true;
                 }
             });
-            
-            if (!found) {
-                eventActionButton.classList.add('hidden');
-                activeEventLocation = null;
+
+            if (nearestUnvisited) {
+                let distanceText;
+                if (minDistance < 1000) {
+                    distanceText = `${Math.round(minDistance)}m`;
+                } else {
+                    distanceText = `${(minDistance / 1000).toFixed(1)}km`;
+                }
+                nearestTargetDisplay.innerHTML = `<strong>次の目標: ${nearestUnvisited.name}</strong> (約 ${distanceText}先)`;
+            } else if (visitedCount < eventLocations.length) {
+                 // まだ達成されていない地点があるが、最寄りの地点を見つけられなかった場合（通常、このブロックには入らないはず）
+                 nearestTargetDisplay.innerHTML = '目標地点を探索中...';
+            } else {
+                // 全ての地点を達成した場合（上のガード節で対応済みだが念のため）
+                nearestTargetDisplay.innerHTML = '現在地を測定中...';
             }
         }
 
 
         function startGeolocationTracking() {
             loadingOverlay.classList.remove('hidden');
-            loadingMessage.innerText = '現在地を取得中...'; 
+            loadingMessage.innerText = '現在地を取得中...'; // メッセージ更新
 
             if (navigator.geolocation) {
+                // --- 修正箇所 2: Geolocationオプションを緩和 ---
                 watchId = navigator.geolocation.watchPosition(pos => {
                     const lat = pos.coords.latitude, lng = pos.coords.longitude;
                     currentMapPosition = { lat: lat, lng: lng };
                     initMap(lat, lng);
                     
-                    // ゲームステータスUIの更新はonSnapshotのコールバックで行われるため、ここではGPS更新をトリガーするだけでOK
-                    // ただし、onSnapshotがまだ発火していない場合に備えて、一度呼び出す
+                    // ゲームステータスUIの更新
                     updateGameStatusUI(lat, lng);
+
+                    let found = false;
+                    const GPS_JITTER_BUFFER = 5; // 5メートルのバッファを導入
+                    
+                    eventLocations.forEach(loc => {
+                        const distance = getDistance(lat, lng, loc.lat, loc.lng);
+                        // --- 修正箇所 3: バッファを追加して判定を緩和 ---
+                        if (distance <= loc.radius + GPS_JITTER_BUFFER) {
+                            activeEventLocation = loc;
+                            eventButtonText.innerText = `${loc.name}のメッセージを見る`;
+                            eventActionButton.classList.remove('hidden');
+                            found = true;
+                        }
+                    });
+                    
+                    if (!found) {
+                        eventActionButton.classList.add('hidden');
+                        activeEventLocation = null;
+                    }
 
                     loadingOverlay.classList.add('hidden');
                 }, err => {
+                    // エラー発生時の処理
                     let errorMessage = '位置情報サービスが拒否されました。設定を確認してください。';
                     if (err.code === err.POSITION_UNAVAILABLE) {
                         errorMessage = 'GPS信号が検出できません。屋外に移動してみてください。';
@@ -829,12 +704,12 @@
                     gameMessages.geolocation_error.text = errorMessage;
 
                     showMessageBox('geolocation_error');
-                    initMap(DEFAULT_LAT, DEFAULT_LNG); 
+                    initMap(DEFAULT_LAT, DEFAULT_LNG); // エラー時もマップは表示
                     loadingOverlay.classList.add('hidden');
                 }, { 
                     enableHighAccuracy: true, 
-                    timeout: 60000,      
-                    maximumAge: 3000     
+                    timeout: 60000,      // タイムアウトを延長
+                    maximumAge: 3000     // 3秒以内のキャッシュを再利用
                 });
             } else {
                 showMessageBox('browser_unsupported');
@@ -843,11 +718,13 @@
             }
         }
 
+        // Handle start game button click
         function startGame() {
             titleScreen.classList.add('hidden');
             showGameIntro();
         }
         
+        // Show game introduction
         function showGameIntro() {
             const messageData = gameMessages['game_intro'];
             document.getElementById('introTitle').innerText = messageData.title;
@@ -855,14 +732,26 @@
             introMessageBox.classList.remove('hidden');
         }
 
+        // Continue to the game screen from intro
         function continueToGame() {
             introMessageBox.classList.add('hidden');
             gameScreen.classList.remove('hidden');
             startGeolocationTracking();
+            // マップサイズが確定した後にLeafletに通知
             setTimeout(() => {
                 if (map) map.invalidateSize();
             }, 100);
         }
+
+        // Event Listeners
+        startButton.addEventListener('click', startGame);
+        continueButton.addEventListener('click', continueToGame);
+        closeMessageButton.addEventListener('click', hideMessageBox);
+        closeDiaryScreenButton.addEventListener('click', hideDiaryScreen);
+        eventActionButton.addEventListener('click', handleEventButtonClick);
+        diaryButton.addEventListener('click', showDiaryScreen);
     </script>
 </body>
 </html>
+apps-fileview.texmex_20251002.00_p0
+1019 初期.tx
