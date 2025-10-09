@@ -863,6 +863,39 @@
                 if (map) map.invalidateSize();
             }, 100);
         }
+
+<!-- UI: 鍵を入手するボタン -->
+<div id="game-ui" style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;">
+    <button id="get-key-btn" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">鍵を入手する</button>
+</div>
+
+<script>
+    // アイテムデータ
+    const itemData = {
+        rusty_key: { name: '古い鍵', description: '錆びた古い鍵です。' }
+    };
+
+    // プレイヤーの所持品
+    let playerInventory = [];
+
+    // 鍵を入手するボタン処理
+    document.getElementById('get-key-btn').addEventListener('click', () => {
+        const keyId = 'rusty_key';
+
+        if (!playerInventory.includes(keyId)) {
+            playerInventory.push(keyId);
+            alert(`「${itemData[keyId].name}」を手に入れた！`);
+            // 一度取ったらボタンを無効化
+            document.getElementById('get-key-btn').disabled = true;
+        } else {
+            alert('すでに鍵は持っています。');
+        }
+
+        console.log('現在の所持品:', playerInventory.map(id => itemData[id].name));
+    });
+</script>
+
+        
     </script>
 </body>
 </html>
