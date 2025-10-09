@@ -1,29 +1,869 @@
-function showDiaryScreen() {
-    diaryList.innerHTML = '';
-    const visitedArray = Object.values(visitedLocations);
-    
-    if (visitedArray.length === 0) {
-        const li = document.createElement('li');
-        li.innerText = 'まだ訪れた場所はありません。';
-        diaryList.appendChild(li);
-    } else {
-        visitedArray.sort((a, b) => (a.firstVisit || 0) - (b.firstVisit || 0));
-        visitedArray.forEach(loc => {
-            const li = document.createElement('li');
-            li.innerHTML = `
-                <strong>${loc.name}</strong>
-                <p>初回訪問: ${loc.firstVisit ? loc.firstVisit.toLocaleString() : '不明'}</p>
-                <p>最終訪問: ${loc.lastVisit ? loc.lastVisit.toLocaleString() : '不明'}</p>
-            `;
-            diaryList.appendChild(li);
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>位置情報ゲーム (アイテム)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <style>
+        html{
+            height: 100%;
+        }
+        body {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            margin: 0;
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #f8f8f8;
+        }
+        #map {
+            height: auto;
+            width: 100vw;
+            border-radius: 0; 
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1),
+                        0 4px 6px -2px rgba(0,0,0,0.05);
+            overflow: hidden;
+        }
+        .loading-overlay {
+            position: fixed; top:0; left:0;
+            width:100%; height:100%;
+            background-color:rgba(0,0,0,0.7);
+            display:flex; flex-direction:column;
+            justify-content:center; align-items:center;
+            color:white; font-size:1.5rem;
+            z-index:9999; text-align:center;
+        }
+        .loading-spinner {
+            border:4px solid rgba(255,255,255,0.3);
+            border-top:4px solid #fff;
+            border-radius:50%;
+            width:40px; height:40px;
+            animation:spin 1s linear infinite;
+            margin-bottom:15px;
+        }
+        @keyframes spin {0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+
+        .message-box {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 10000;
+        }
+        .message-content {
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.25);
+            text-align: center;
+            max-width: 90%;
+            animation: fadeInScale 0.3s ease-out forwards;
+            position: relative;
+        }
+        @keyframes fadeInScale {
+            from { opacity: 0; transform: scale(0.9);}
+            to  { opacity: 1; transform: scale(1);}
+        }
+        .message-content h2 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1a202c;
+            margin-bottom: 1rem;
+        }
+        .message-content p, .message-content ul, .message-content li {
+            font-size:1rem;
+            color:#333;
+            margin-bottom:1rem;
+            line-height:1.6;
+            max-height: 50vh;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            text-align: left;
+        }
+        .message-content button {
+            background-color:#4F46E5;
+            color:white;
+            padding:10px 20px;
+            border-radius:8px;
+            border:none;
+            font-weight:bold;
+            cursor:pointer;
+            transition: background-color 0.3s ease;
+        }
+        .message-content button:hover {
+            background-color: #3B82F6;
+        }
+
+        .control-bar {
+            display:flex;
+            justify-content:space-between; 
+            align-items:center;
+            padding:8px 16px; 
+            background-color:#f0f0f0;
+            box-shadow:0 -4px 8px rgba(0,0,0,0.1);
+            height:96px; /* 高さ調整 */
+            gap: 1rem;
+        }
+        .status-panel {
+            flex-grow: 1;
+            padding: 0 10px;
+            text-align: left;
+        }
+        .event-button {
+            background-color:#3B82F6; color:white;
+            padding:15px 20px; border-radius:10px;
+            font-size:1.0rem; font-weight:bold; 
+            border:none; cursor:pointer;
+            white-space: nowrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: all 0.2s ease;
+        }
+        .event-button:hover {
+            background-color: #2563EB;
+            transform: translateY(-1px);
+        }
+        .event-button.use-item {
+            background-color: #EF4444; /* アイテム使用時は赤色に */
+        }
+        .event-button.use-item:hover {
+            background-color: #DC2626;
+        }
+        
+        .diary-button {
+            background-color:#4f46e5; color:white;
+            padding:10px 15px; border-radius:10px;
+            font-size:1rem; font-weight:bold;
+            border:none; cursor:pointer;
+            white-space: nowrap;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.2s ease;
+        }
+        .diary-button:hover {
+            background-color: #6366F1;
+        }
+        
+        /* タイトル画面のスタイル */
+        #titleScreen {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #a7b7e3, #6a7ac2);
+            color: white;
+            text-align: center;
+            animation: fadeIn 1s ease-in-out;
+            padding: 20px;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        #titleScreen h1 {
+            font-size: 3rem;
+            font-weight: 800;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        #titleScreen p {
+            font-size: 1.25rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+        }
+        #startButton {
+            background-color: #fff;
+            color: #4f46e5;
+            padding: 1rem 3rem;
+            font-size: 1.25rem;
+            font-weight: bold;
+            border-radius: 9999px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease-in-out, background-color 0.2s;
+        }
+        #startButton:hover {
+            transform: translateY(-2px);
+            background-color: #f3f4f6;
+        }
+
+        .hidden { display:none !important; }
+
+        .leaflet-marker-pane, .leaflet-shadow-pane {
+            z-index: 600;
+        }
+
+        #diaryScreen {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem;
+            box-sizing: border-box;
+            z-index: 10000;
+        }
+        #diaryScreen h2 {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #1a202c;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        #diaryScreen ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        #diaryScreen li {
+            background-color: #f0f4ff;
+            border-radius: 12px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        #diaryScreen li strong {
+            display: block;
+            font-size: 1.25rem;
+            margin-bottom: 0.5rem;
+            color: #4F46E5;
+        }
+        #diaryScreen button {
+            background-color:#4F46E5;
+            color:white;
+            padding:12px 24px;
+            border-radius:8px;
+            border:none;
+            font-weight:bold;
+            cursor:pointer;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        #diaryScreen button:hover {
+            background-color: #3B82F6;
+        }
+
+        /* プレイヤーマーカーのスタイル */
+        .player-marker {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background-color: #FF0000;
+            border: 3px solid #FFFFFF;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <!-- タイトル画面 -->
+    <div id="titleScreen">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">龍ヶ崎ゴー</h1>
+        <p class="text-lg md:text-xl mb-8">このゲームは、現実世界を舞台にした冒険ゲームです。地図上のスポットを訪れて、隠されたメッセージを見つけ出しましょう！</p>
+        <button id="startButton">ゲームを始める</button>
+    </div>
+
+    <!-- ゲーム説明のメッセージボックス（全画面表示） -->
+    <div id="introMessageBox" class="message-box hidden">
+        <div class="message-content">
+            <h2 id="introTitle"></h2>
+            <p id="introText"></p>
+            <button id="continueButton">冒険を始める</button>
+        </div>
+    </div>
+
+    <!-- ロード中のオーバーレイ -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <span id="loadingMessage">初期設定中...</span>
+    </div>
+
+    <!-- メッセージボックス（全画面表示） -->
+    <div id="messageBox" class="message-box hidden">
+        <div class="message-content">
+            <h2 id="messageTitle"></h2>
+            <p id="messageText"></p>
+            <button id="closeMessageButton">閉じる</button>
+        </div>
+    </div>
+
+    <!-- 日記のフルスクリーン画面 -->
+    <div id="diaryScreen" class="hidden">
+        <h2>冒険の記録</h2>
+        <ul id="diaryList"></ul>
+        <button id="closeDiaryScreenButton">地図に戻る</button>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="gameScreen" class="hidden flex-1 flex flex-col">
+        <div id="map" class="flex-1"></div>
+        <div id="controlBar" class="control-bar">
+            <!-- ステータス表示パネル -->
+            <div id="statusPanel" class="status-panel text-gray-700">
+                <div id="visitedCountDisplay" class="font-bold text-lg text-indigo-700">実績: 0 / 5 箇所</div>
+                <div id="itemStatusDisplay" class="text-sm font-medium text-purple-600">アイテム: なし</div>
+                <div id="nearestTargetDisplay" class="text-sm font-medium text-gray-600">現在地を測定中...</div>
+            </div>
+            
+            <button id="diaryButton" class="diary-button">
+                <span>日記</span>
+            </button>
+            <button id="eventActionButton" class="event-button hidden">
+                <span id="eventButtonText">イベントを発見！</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, serverTimestamp, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Firebase Loggingを有効化 (デバッグ用)
+        setLogLevel('debug');
+
+        // デフォルトの座標（東京駅） - 位置情報エラー時のフォールバック
+        const DEFAULT_LAT = 35.681236, DEFAULT_LNG = 139.767125;
+
+        // Firebase Initialization
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            // Local testing config (dummy values)
+            apiKey: "AIzaSyCDSiW9H_zD0yMUda9QI0PHViKDPUJ7aak",
+            authDomain: "mapaplication-131cd.firebaseapp.com",
+            projectId: "mapaplication-131cd",
+            storageBucket: "mapaplication-131cd.firebasestorage.app",
+            messagingSenderId: "705232824885",
+            appId: "1:705232824885:web:206e16a332b1b987929f7c",
+            measurementId: "G-39Q9ZDTB0V"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        let isAuthReady = false; 
+        let userId = null;
+        let visitedLocations = {}; // { locationId: { id, name, firstVisit, lastVisit } }
+        let currentMapPosition = { lat: DEFAULT_LAT, lng: DEFAULT_LNG };
+        
+        // --- アイテムシステム用グローバルステート ---
+        let heldItem = null; // プレイヤーが現在持っているアイテムID (e.g., 'rusty_key' or null)
+
+        // アイテムデータ
+        const itemData = {
+            rusty_key: { name: '錆びた鍵' }
+        };
+
+        // Auth State Listener
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                userId = user.uid;
+                console.log("Firebase Auth State Changed. User ID:", userId);
+                
+                // 1. 訪問履歴をリアルタイムで同期
+                const visitedRef = collection(db, `artifacts/${appId}/users/${userId}/visited_locations`);
+                onSnapshot(visitedRef, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        const data = change.doc.data();
+                        visitedLocations[change.doc.id] = {
+                            id: change.doc.id,
+                            name: data.name,
+                            firstVisit: data.firstVisit ? data.firstVisit.toDate() : null,
+                            lastVisit: data.lastVisit ? data.lastVisit.toDate() : null
+                        };
+                    });
+                    console.log("Visited locations updated:", visitedLocations);
+                    // 訪問履歴が更新されたらUIも更新
+                    updateGameStatusUI(currentMapPosition.lat, currentMapPosition.lng);
+                }, (error) => {
+                    console.error("Error listening to visited locations:", error);
+                });
+
+                // 2. プレイヤーの状態（アイテム）をリアルタイムで同期
+                const playerStateRef = doc(db, `artifacts/${appId}/users/${userId}/player_state`, 'current');
+                onSnapshot(playerStateRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        heldItem = data.heldItem || null; // heldItem: 'rusty_key' or null
+                        console.log("Player state updated. Held Item:", heldItem);
+                    } else {
+                        // 初回起動時またはデータがない場合は初期化
+                        heldItem = null;
+                        setDoc(playerStateRef, { heldItem: null, lastUpdate: serverTimestamp() }, { merge: true });
+                    }
+                    updateGameStatusUI(currentMapPosition.lat, currentMapPosition.lng);
+                }, (error) => {
+                    console.error("Error listening to player state:", error);
+                });
+
+
+                // 認証が完了し、データリスナーも設定されたことを示す
+                isAuthReady = true; 
+
+            } else {
+                console.log("No user signed in. Signing in anonymously.");
+                try {
+                    if (typeof __initial_auth_token !== 'undefined') {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+                } catch (error) {
+                    console.error("Anonymous sign-in failed:", error);
+                }
+            }
         });
-    }
 
-    diaryScreen.classList.remove('hidden');
-    gameScreen.classList.add('hidden');
-}
+        // Game messages data (アイテム関連のメッセージを追加)
+        const gameMessages = {
+            tokyo_station: { title: '東京駅の秘密', text: '東京駅を発見しました！不思議なメモが落ちています…。「東の森の奥深くに、失われた宝が眠る。」と書かれている。' },
+            asakusa_sensoji: { title: '浅草寺の静寂', text: '浅草寺に到着しました。荘厳な雰囲気の中で、この世界の真実が映し出されているように見えます。' },
+            shinjuku_gyoen: { title: '新宿御苑の手帳', text: '新宿御苑のベンチの下に、古びた手帳を見つけました。次の目的地へのヒントが隠されているようです。' },
+            ryuiti: { title:'竜一の隠れ家', text: '高台の上にあるため見晴らしがいい' },
+            ryugasaki_syotengai: { title:'龍ヶ崎商店街', text: 'ここではいろいろなアイテムが売っている。' },
+            
+            // --- アイテム関連メッセージ ---
+            item_acquired: { title: 'アイテム入手！', text: '竜一の隠れ家で、不思議な力で「錆びた鍵」を手に入れました。何かに使えるかもしれません。' },
+            old_shrine_default: { title: '古びた祠', text: '鍵がかかった祠があります。何か古い鍵があれば開けられそうです。' },
+            shrine_unlocked: { title: '祠が開いた！', text: '錆びた鍵を使って祠の扉を開けると、中から「伝説の剣の設計図」が見つかりました！大冒険の始まりです！' },
+            item_not_needed: { title: 'イベント発生', text: '何もアイテムを使わずにイベントが起こりました。' },
+            item_wrong_item: { title: 'アイテムが合わない', text: '持っているアイテムは「古びた祠」には合わないようです。' },
 
-function hideDiaryScreen() {
-    diaryScreen.classList.add('hidden');
-    gameScreen.classList.remove('hidden');
-}
+            // --- システムメッセージ ---
+            geolocation_error: { title: '位置情報エラー', text: '位置情報を取得できません。お使いのブラウザやデバイスの設定（GPSアクセス許可）を確認してください。' },
+            browser_unsupported: { title: '非対応ブラウザ', text: 'お使いのブラウザはGeolocationをサポートしていません。' },
+            firestore_error: { title: 'データ保存エラー', text: 'ユーザーデータの保存中に問題が発生しました。インターネット接続を確認し、ブラウザを再読み込みしてもう一度お試しください。' },
+            auth_error: { title: '認証処理中', text: 'ゲームの初期設定（ユーザー認証）がまだ完了していません。しばらくお待ちいただくか、ブラウザを再読み込みしてください。' },
+            game_intro: { title: '冒険の始まり', text: 'このゲームは、現実世界を舞台にした冒険ゲームです。\n\n地図上にある青いサークルは目的地です。サークルの中に入ると、画面の下にボタンが現れます。ボタンを押して、メッセージを読みましょう！\n\nさあ、冒険に出発です！' }
+        };
+
+        let map, marker, watchId=null, activeEventLocation=null;
+
+        const eventLocations = [
+            { id:'tokyo_station', name:'東京駅', lat:35.681236, lng:139.767125, radius:150, messageId: 'tokyo_station' },
+            { id:'asakusa_sensoji', name:'浅草寺', lat:35.714774, lng:139.796637, radius:80, messageId: 'asakusa_sensoji' },
+            { id:'shinjuku_gyoen', name:'新宿御苑', lat:35.685175, lng:139.710776, radius:100, messageId: 'shinjuku_gyoen' },
+            
+            // アイテム入手スポット (錆びた鍵を入手)
+            // プレイヤーが現在地にいない可能性があるため、radiusを大きめに設定
+            { id:'ryuiti', name:'竜一', lat:35.9150826, lng:140.1875742, radius:150, messageId: 'ryuiti', acquireItem: 'rusty_key' },
+            { id:'syotengai', name:'龍ヶ崎商店街', lat:35.90764205837861, lng:140.18062645636314, radius:150, messageId: 'ryugasaki_syotengai'},
+
+            // アイテム使用スポット (錆びた鍵を要求)
+            { id:'old_shrine', name:'古びた祠', lat:35.9080, lng:140.1850, radius:1000000, messageId: 'old_shrine_default', requiredItem: 'rusty_key', useMessageId: 'shrine_unlocked' }
+        ];
+
+        // DOM elements
+        const titleScreen = document.getElementById('titleScreen');
+        const introMessageBox = document.getElementById('introMessageBox');
+        const gameScreen = document.getElementById('gameScreen');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const loadingMessage = document.getElementById('loadingMessage'); 
+        const messageBox = document.getElementById('messageBox');
+        const messageTitle = document.getElementById('messageTitle');
+        const messageText = document.getElementById('messageText');
+        const eventActionButton = document.getElementById('eventActionButton');
+        const eventButtonText = document.getElementById('eventButtonText');
+        const diaryScreen = document.getElementById('diaryScreen');
+        const diaryList = document.getElementById('diaryList');
+        const visitedCountDisplay = document.getElementById('visitedCountDisplay');
+        const itemStatusDisplay = document.getElementById('itemStatusDisplay'); // アイテム表示
+        const nearestTargetDisplay = document.getElementById('nearestTargetDisplay');
+
+        // イベントリスナーのセットアップ（DOM取得の下に移動）
+        document.getElementById('startButton').addEventListener('click', startGame);
+        document.getElementById('continueButton').addEventListener('click', continueToGame);
+        document.getElementById('closeMessageButton').addEventListener('click', hideMessageBox);
+        document.getElementById('closeDiaryScreenButton').addEventListener('click', hideDiaryScreen);
+        document.getElementById('eventActionButton').addEventListener('click', handleEventButtonClick);
+        document.getElementById('diaryButton').addEventListener('click', showDiaryScreen);
+
+
+        function showMessageBox(messageId) {
+            const messageData = gameMessages[messageId];
+            if (messageData) {
+                messageTitle.innerText = messageData.title;
+                messageText.innerText = messageData.text;
+                messageBox.classList.remove('hidden');
+            }
+        }
+
+        function hideMessageBox() {
+            messageBox.classList.add('hidden');
+        }
+
+        function showDiaryScreen() {
+            diaryList.innerHTML = '';
+            const visitedArray = Object.values(visitedLocations);
+            
+            if (visitedArray.length === 0) {
+                const li = document.createElement('li');
+                li.innerHTML = 'まだ訪れた場所はありません。';
+                diaryList.appendChild(li);
+            } else {
+                // 日付の新しい順にソート
+                visitedArray.sort((a, b) => b.lastVisit.getTime() - a.lastVisit.getTime());
+                visitedArray.forEach(loc => {
+                    const formatDate = (date) => date ? date.toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+                    
+                    const firstVisitDate = formatDate(loc.firstVisit);
+                    const lastVisitDate = formatDate(loc.lastVisit);
+                    
+                    const li = document.createElement('li');
+                    li.innerHTML = `
+                        <strong>${loc.name}</strong><br>
+                        初回訪問: ${firstVisitDate}<br>
+                        最終訪問: ${lastVisitDate}
+                    `;
+                    diaryList.appendChild(li);
+                });
+            }
+            gameScreen.classList.add('hidden');
+            diaryScreen.classList.remove('hidden');
+        }
+
+        function hideDiaryScreen() {
+            diaryScreen.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+        }
+
+        /**
+         * 訪問履歴とアイテムの処理をFirestoreに保存・更新する
+         */
+        async function updatePlayerState(locationId, locationName, acquireItem, consumeItem = false) {
+            const now = serverTimestamp();
+            
+            // 1. 訪問履歴の更新
+            const locationDocRef = doc(db, `artifacts/${appId}/users/${userId}/visited_locations`, locationId);
+            try {
+                const docSnap = await getDoc(locationDocRef);
+                if (docSnap.exists()) {
+                    await setDoc(locationDocRef, { lastVisit: now }, { merge: true });
+                } else {
+                    await setDoc(locationDocRef, { id: locationId, name: locationName, firstVisit: now, lastVisit: now });
+                }
+            } catch (error) {
+                console.error("Error updating Firestore visit record:", error);
+                showMessageBox('firestore_error');
+                return;
+            }
+
+            // 2. アイテムの更新 (プレイヤーの状態ドキュメントを更新)
+            const playerStateRef = doc(db, `artifacts/${appId}/users/${userId}/player_state`, 'current');
+            let newHeldItem = heldItem;
+
+            if (acquireItem && !heldItem) {
+                // アイテムを入手する場合
+                newHeldItem = acquireItem;
+                console.log(`Item acquired: ${acquireItem}`);
+            } else if (consumeItem) {
+                // アイテムを消費する場合
+                newHeldItem = null;
+                console.log(`Item consumed.`);
+            }
+
+            if (newHeldItem !== heldItem) {
+                 try {
+                    await setDoc(playerStateRef, { heldItem: newHeldItem, lastUpdate: now }, { merge: true });
+                    // heldItemの更新はonSnapshotで自動的に行われる
+                } catch (error) {
+                    console.error("Error updating Firestore held item:", error);
+                    showMessageBox('firestore_error');
+                }
+            }
+            
+            // メッセージを表示
+            if (acquireItem && !heldItem) {
+                showMessageBox('item_acquired');
+            } else if (consumeItem) {
+                showMessageBox(activeEventLocation.useMessageId);
+            } else if (activeEventLocation.requiredItem && heldItem) {
+                showMessageBox('item_not_needed'); // requiredItemがあるが、特別なメッセージがなかった場合
+            } else {
+                showMessageBox(activeEventLocation.messageId);
+            }
+
+            // ボタンを非表示にする（メッセージボックスを閉じたら再評価される）
+            eventActionButton.classList.add('hidden');
+            activeEventLocation = null;
+        }
+
+        async function handleEventButtonClick() {
+            if (!isAuthReady || !userId) {
+                console.error("Authentication not ready or user ID missing. Blocking Firestore write.");
+                showMessageBox('auth_error'); 
+                return;
+            }
+
+            if (!activeEventLocation) {
+                console.error("No active event location found.");
+                return;
+            }
+            
+            const location = activeEventLocation;
+
+            // 1. アイテム使用ロジックのチェック
+            if (location.requiredItem) {
+                const requiredItemName = itemData[location.requiredItem]?.name || '必要なアイテム';
+                
+                if (heldItem === location.requiredItem) {
+                    // 必要なアイテムを持っている -> アイテムを使用して特別なイベントを発生させる
+                    if (location.useMessageId) {
+                        // 訪問記録を更新し、アイテムを消費する
+                        await updatePlayerState(location.id, location.name, null, true); // true = consume item
+                    } else {
+                        // requiredItemはあるが、useMessageIdがない場合
+                        showMessageBox('item_not_needed'); 
+                    }
+                    return;
+
+                } else if (heldItem) {
+                    // 別のアイテムを持っている
+                    const heldItemName = itemData[heldItem]?.name || '未知のアイテム';
+                    gameMessages.item_wrong_item.text = `${location.name}を開けるには${requiredItemName}が必要です。今持っている${heldItemName}はここでは使えません。`;
+                    showMessageBox('item_wrong_item');
+                    return;
+
+                } else {
+                    // アイテムを何も持っていない
+                    showMessageBox(location.messageId); // 通常のメッセージ (例: 「鍵が必要です」)
+                    // 訪問記録のみ更新 (この場合は訪問とは見なさないが、メッセージ表示のために利用)
+                    const locationDocRef = doc(db, `artifacts/${appId}/users/${userId}/visited_locations`, location.id);
+                    await setDoc(locationDocRef, { lastVisit: serverTimestamp(), name: location.name }, { merge: true });
+                    return;
+                }
+            } 
+            
+            // 2. アイテム入手ロジックのチェック
+            if (location.acquireItem && !heldItem) {
+                 // アイテムを入手する場合
+                await updatePlayerState(location.id, location.name, location.acquireItem, false);
+                return;
+            }
+
+            // 3. 通常のイベント処理（アイテムが不要な場所、または既にアイテムを入手済みの場所）
+            await updatePlayerState(location.id, location.name, null, false);
+        }
+
+        // Haversine formula for distance calculation (meters)
+        function getDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // metres
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                        Math.cos(φ1) * Math.cos(φ2) *
+                        Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function initMap(latitude, longitude) {
+            const currentLocation = [latitude, longitude];
+            if (map) {
+                map.setView(currentLocation, 18);
+                marker.setLatLng(currentLocation);
+            } else {
+                map = L.map('map').setView(currentLocation, 18);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                    maxZoom: 19
+                }).addTo(map);
+
+                marker = L.marker(currentLocation, {
+                    icon: L.divIcon({
+                        className: 'custom-marker',
+                        html: `<div class="player-marker"></div>`, 
+                        iconSize: [18, 18]
+                    })
+                }).addTo(map);
+
+                eventLocations.forEach(loc => {
+                    L.circle([loc.lat, loc.lng], {
+                        color: '#0000FF', fillColor: '#0000FF', fillOpacity: 0.15, radius: loc.radius
+                    }).addTo(map);
+                    
+                    L.circleMarker([loc.lat, loc.lng], {
+                        color: '#0000FF', fillColor: '#0000FF', fillOpacity: 0.8, radius: 5, stroke: false
+                    }).addTo(map)
+                    .bindPopup(`<b>${loc.name}</b><br>目標地点`);
+                });
+            }
+            loadingOverlay.classList.add('hidden');
+        }
+
+        /**
+         * 現在の訪問実績、アイテムステータス、最寄り地点を更新する
+         */
+        function updateGameStatusUI(currentLat, currentLng) {
+            const visitedCount = Object.keys(visitedLocations).length;
+            const totalLocations = eventLocations.length;
+            visitedCountDisplay.innerText = `実績: ${visitedCount} / ${totalLocations} 箇所`;
+
+            // アイテム表示の更新
+            if (heldItem && itemData[heldItem]) {
+                itemStatusDisplay.innerHTML = `<strong>アイテム: ${itemData[heldItem].name}</strong>`;
+            } else {
+                itemStatusDisplay.innerText = `アイテム: なし`;
+            }
+
+            let nearestUnvisited = null;
+            let minDistance = Infinity;
+
+            // ... (最寄り地点計算ロジックは省略せずに残す)
+            if (visitedCount === totalLocations) {
+                 nearestTargetDisplay.innerHTML = '<strong>全ての場所を訪問しました！おめでとう！</strong>';
+            } else {
+                eventLocations.forEach(loc => {
+                    // 訪問済みリストに存在しない場所をチェック (アイテムで消費された地点も含む)
+                    // ただし、全ての地点を追跡目標とするため、アイテム使用はここでは無視
+                    if (loc.id !== 'old_shrine') { // 祠はアイテムを使わないと完了とみなさない
+                        if (!visitedLocations[loc.id]) {
+                            const distance = getDistance(currentLat, currentLng, loc.lat, loc.lng);
+                            if (distance < minDistance) {
+                                minDistance = distance;
+                                nearestUnvisited = loc;
+                            }
+                        }
+                    } else if (loc.id === 'old_shrine' && !visitedLocations[loc.id]) {
+                         const distance = getDistance(currentLat, currentLng, loc.lat, loc.lng);
+                         if (distance < minDistance) {
+                            minDistance = distance;
+                            nearestUnvisited = loc;
+                         }
+                    }
+                });
+
+                if (nearestUnvisited) {
+                    let distanceText;
+                    if (minDistance < 1000) {
+                        distanceText = `${Math.round(minDistance)}m`;
+                    } else {
+                        distanceText = `${(minDistance / 1000).toFixed(1)}km`;
+                    }
+                    nearestTargetDisplay.innerHTML = `<strong>次の目標: ${nearestUnvisited.name}</strong> (約 ${distanceText}先)`;
+                } else if (visitedCount < totalLocations) {
+                    nearestTargetDisplay.innerHTML = '目標地点を探索中...';
+                } else {
+                    nearestTargetDisplay.innerHTML = '現在地を測定中...';
+                }
+            }
+
+
+            // 接近イベント判定とボタン表示の更新
+            let found = false;
+            const GPS_JITTER_BUFFER = 5; 
+            
+            eventLocations.forEach(loc => {
+                const distance = getDistance(currentLat, currentLng, loc.lat, loc.lng);
+
+                if (distance <= loc.radius + GPS_JITTER_BUFFER) {
+                    activeEventLocation = loc;
+                    eventActionButton.classList.remove('hidden');
+                    eventActionButton.classList.remove('acquire-item', 'use-item'); // クラスをリセット
+                    
+                    let buttonText = `${loc.name}のメッセージを見る`;
+
+                    if (loc.requiredItem && heldItem === loc.requiredItem) {
+                        // アイテム使用可能
+                        buttonText = `${itemData[heldItem].name}を使う (実行)`;
+                        eventActionButton.classList.add('use-item');
+                    } else if (loc.requiredItem) {
+                        // アイテムが必要だが持っていない
+                        buttonText = `${loc.name}を調べる (鍵が必要)`;
+                        eventActionButton.classList.remove('use-item');
+                    } else if (loc.acquireItem && !heldItem) {
+                        // アイテム入手可能
+                        buttonText = `${itemData[loc.acquireItem].name}を入手 (獲得)`;
+                        eventActionButton.classList.add('acquire-item');
+                    }
+                    
+                    eventButtonText.innerText = buttonText;
+                    found = true;
+                }
+            });
+            
+            if (!found) {
+                eventActionButton.classList.add('hidden');
+                activeEventLocation = null;
+            }
+        }
+
+
+        function startGeolocationTracking() {
+            loadingOverlay.classList.remove('hidden');
+            loadingMessage.innerText = '現在地を取得中...'; 
+
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(pos => {
+                    const lat = pos.coords.latitude, lng = pos.coords.longitude;
+                    currentMapPosition = { lat: lat, lng: lng };
+                    initMap(lat, lng);
+                    
+                    // ゲームステータスUIの更新はonSnapshotのコールバックで行われるため、ここではGPS更新をトリガーするだけでOK
+                    // ただし、onSnapshotがまだ発火していない場合に備えて、一度呼び出す
+                    updateGameStatusUI(lat, lng);
+
+                    loadingOverlay.classList.add('hidden');
+                }, err => {
+                    let errorMessage = '位置情報サービスが拒否されました。設定を確認してください。';
+                    if (err.code === err.POSITION_UNAVAILABLE) {
+                        errorMessage = 'GPS信号が検出できません。屋外に移動してみてください。';
+                    } else if (err.code === err.TIMEOUT) {
+                        errorMessage = '位置情報の取得に時間がかかりすぎました。';
+                    }
+                    gameMessages.geolocation_error.text = errorMessage;
+
+                    showMessageBox('geolocation_error');
+                    initMap(DEFAULT_LAT, DEFAULT_LNG); 
+                    loadingOverlay.classList.add('hidden');
+                }, { 
+                    enableHighAccuracy: true, 
+                    timeout: 60000,    
+                    maximumAge: 3000    
+                });
+            } else {
+                showMessageBox('browser_unsupported');
+                initMap(DEFAULT_LAT, DEFAULT_LNG);
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        function startGame() {
+            titleScreen.classList.add('hidden');
+            showGameIntro();
+        }
+        
+        function showGameIntro() {
+            const messageData = gameMessages['game_intro'];
+            document.getElementById('introTitle').innerText = messageData.title;
+            document.getElementById('introText').innerText = messageData.text;
+            introMessageBox.classList.remove('hidden');
+        }
+
+        function continueToGame() {
+            introMessageBox.classList.add('hidden');
+            gameScreen.classList.remove('hidden');
+            startGeolocationTracking();
+            setTimeout(() => {
+                if (map) map.invalidateSize();
+            }, 100);
+        }
+    </script>
+</body>
+</html>
+
