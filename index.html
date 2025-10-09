@@ -71,7 +71,7 @@
         }
         @keyframes fadeInScale {
             from { opacity: 0; transform: scale(0.9);}
-            to  { opacity: 1; transform: scale(1);}
+            to  { opacity: 1; transform: scale(1);}
         }
         .message-content h2 {
             font-size: 1.5rem;
@@ -833,8 +833,8 @@
                     loadingOverlay.classList.add('hidden');
                 }, { 
                     enableHighAccuracy: true, 
-                    timeout: 60000,    
-                    maximumAge: 3000    
+                    timeout: 60000,      
+                    maximumAge: 3000     
                 });
             } else {
                 showMessageBox('browser_unsupported');
@@ -863,16 +863,6 @@
                 if (map) map.invalidateSize();
             }, 100);
         }
-
-<!-- UI: 鍵を入手するボタン -->
-<div id="game-ui" style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); z-index: 1000;">
-    <button id="get-key-btn" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">鍵を入手する</button>
-</div>
-
-
-
-        
     </script>
 </body>
 </html>
-
