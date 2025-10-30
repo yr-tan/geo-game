@@ -13,14 +13,18 @@ body {
 /* 🔧 マップの高さを少し小さくして下のボタンが見切れないように */
 #map {
     position: relative;
-    width: 90vw;              /* 画面幅の90%にして少し余白をつける */
-    aspect-ratio: 1 / 1;      /* 正方形に固定 */
-    margin: 10px auto 0 auto; /* 上下に余白、中央寄せ */
+    width: 90vw;
+    max-width: 600px;          /* PCでは少し制限 */
+    height: auto;
+    aspect-ratio: 1 / 1;       /* 正方形にする（モダンブラウザ対応） */
+    margin: 20px auto;
     border-radius: 12px;
     box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1),
                 0 4px 6px -2px rgba(0,0,0,0.05);
     overflow: hidden;
+    flex-shrink: 0;             /* flex親で潰れないようにする */
 }
+
 
 .loading-overlay {
     position: fixed; top:0; left:0;
@@ -243,6 +247,7 @@ body {
     border: 3px solid #FFFFFF;
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
+
 
 
 
