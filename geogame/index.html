@@ -1,0 +1,79 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>位置情報ゲーム</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <!-- Project styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- タイトル画面 -->
+    <div id="titleScreen">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-bold mb-4">龍ヶ崎ゴー</h1>
+        <p class="text-lg md:text-xl mb-8">このゲームは、現実世界を舞台にした冒険ゲームです。地図上のスポットを訪れて、隠されたメッセージを見つけ出しましょう！</p>
+        <button id="startButton">ゲームを始める</button>
+    </div>
+
+    <!-- ゲーム説明のメッセージボックス（全画面表示） -->
+    <div id="introMessageBox" class="message-box hidden">
+        <div class="message-content">
+            <h2 id="introTitle"></h2>
+            <p id="introText"></p>
+            <button id="continueButton">冒険を始める</button>
+        </div>
+    </div>
+
+    <!-- ロード中のオーバーレイ -->
+    <div id="loadingOverlay" class="loading-overlay hidden">
+        <div class="loading-spinner"></div>
+        <!-- ロードメッセージをより詳細に -->
+        <span id="loadingMessage">初期設定中...</span>
+    </div>
+
+    <!-- メッセージボックス（全画面表示） -->
+    <div id="messageBox" class="message-box hidden">
+        <div class="message-content">
+            <h2 id="messageTitle"></h2>
+            <p id="messageText"></p>
+            <button id="closeMessageButton">閉じる</button>
+        </div>
+    </div>
+
+    <!-- 日記のフルスクリーン画面 -->
+    <div id="diaryScreen" class="hidden">
+        <h2>冒険の記録</h2>
+        <ul id="diaryList"></ul>
+        <button id="closeDiaryScreenButton">地図に戻る</button>
+    </div>
+
+    <!-- ゲーム画面 -->
+    <div id="gameScreen" class="hidden flex-1 flex flex-col">
+        <div id="map" class="flex-1"></div>
+        <div id="controlBar" class="control-bar">
+            <!-- 追加したステータス表示パネル -->
+            <div id="statusPanel" class="status-panel text-gray-700">
+                <div id="visitedCountDisplay" class="font-bold text-lg text-indigo-700">実績: 0 / 5 箇所</div>
+                <div id="nearestTargetDisplay" class="text-sm font-medium text-gray-600">現在地を測定中...</div>
+            </div>
+            
+            <button id="diaryButton" class="diary-button">
+                <span>日記</span>
+            </button>
+            <button id="eventActionButton" class="event-button hidden">
+                <span id="eventButtonText">イベントを発見！</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Leaflet JavaScript -->
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <!-- App script (module) -->
+    <script type="module" src="app.js"></script>
+</body>
+</html>
