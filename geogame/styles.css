@@ -12,7 +12,7 @@ body {
 
 /* 🔧 マップの高さを少し小さくして下のボタンが見切れないように */
 #map {
-     height: calc(100vh - 500px); /* 少し小さくして上下に余裕を作る */
+     height: calc(100vh - 10000px); /* 少し小さくして上下に余裕を作る */
     width: calc(100vw - 300px);   /* 左右にも余白を作る */
     margin: 150px;                /* 全方向に10pxの余白 */
     border-radius: 12px;         /* 角を少し丸くして自然に */
@@ -242,6 +242,7 @@ body {
     border: 3px solid #FFFFFF;
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
+
 
 
 
