@@ -12,16 +12,15 @@ body {
 
 /* 🔧 マップの高さを少し小さくして下のボタンが見切れないように */
 #map {
-    /* 通常の高さ指定 */
-    height: calc(100dvh - 160px); /* ← "dvh" を使うのが重要！ */
+    position: relative;
     width: calc(100vw - 20px);
-    margin: 10px;
+    height: calc(100svh - 180px); /* ← スマホ対応で確実に小さく表示される */
+    margin: 10px auto;
     border-radius: 12px;
     box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1),
                 0 4px 6px -2px rgba(0,0,0,0.05);
     overflow: hidden;
 }
-
 
 .loading-overlay {
     position: fixed; top:0; left:0;
@@ -244,6 +243,7 @@ body {
     border: 3px solid #FFFFFF;
     box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
+
 
 
 
