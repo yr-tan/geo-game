@@ -75,5 +75,14 @@
     <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
     <!-- App script (module) -->
     <script type="module" src="app.js"></script>
+    <script>
+window.addEventListener('resize', () => {
+  const map = document.getElementById('map');
+  const width = map.offsetWidth;
+  map.style.height = `${width}px`; // 幅と高さを同じに
+});
+window.dispatchEvent(new Event('resize')); // 初回実行
+</script>
 </body>
 </html>
+
